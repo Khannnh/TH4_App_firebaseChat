@@ -2,6 +2,10 @@
 #
 .DS_Store
 
+node_modules/
+android/build/
+ios/Pods/
+
 # Xcode
 #
 build/
