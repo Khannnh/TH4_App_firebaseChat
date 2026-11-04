@@ -1,4 +1,5 @@
 import React from 'react';
+import { SafeAreaView, StyleSheet, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -11,11 +12,18 @@ import { ContactsScreen } from '../screen/ContactsScreen';
 import { NotificationScreen } from '../screen/NotiScreen';
 import { SettingsScreen } from '../screen/SettingScreen';
 import { ChatDetailScreen } from '../screen/ChatDetailScreen';
+import { useAuth } from '../context/AuthContext';
+import type {
+  ContactsStackParamList,
+  HomeStackParamList,
+  MainTabParamList,
+  RootStackParamList,
+} from '../types';
 
-const Stack = createNativeStackNavigator();
-const Tab = createBottomTabNavigator();
-const HomeStack = createNativeStackNavigator();
-const ContactsStack = createNativeStackNavigator();
+const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
+const HomeStack = createNativeStackNavigator<HomeStackParamList>();
+const ContactsStack = createNativeStackNavigator<ContactsStackParamList>();
 
 function HomeStackNavigator() {
   return (
@@ -61,14 +69,40 @@ function MainTabNavigator() {
   );
 }
 
-export default function AppNavigator() {
+function FirebaseConfigurationScreen({ message }: { message: string }) {
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Splash">
-        <Stack.Screen name="Splash" component={SplashScreen} />
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+    <SafeAreaView style={styles.errorContainer}>
+      <Text style={styles.errorTitle}>Cần cấu hình Firebase</Text>
+      <Text style={styles.errorMessage}>{message}</Text>
+    </SafeAreaView>
+  );
+}
+
+export default function AppNavigator() {
+  const { user, loading, configurationError } = useAuth();
+
+  if (loading) {
+    return <SplashScreen />;
+  }
+  if (configurationError) {
+    return <FirebaseConfigurationScreen message={configurationError} />;
+  }
+
+  return (
+    <NavigationContainer key={user?.uid ?? 'signed-out'}>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {user ? (
+          <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+        ) : (
+          <Stack.Screen name="Login" component={LoginScreen} />
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  errorContainer: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#F8FAFC' },
+  errorTitle: { fontSize: 22, fontWeight: '700', color: '#B91C1C', marginBottom: 12 },
+  errorMessage: { fontSize: 15, lineHeight: 23, color: '#334155' },
+});

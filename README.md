@@ -95,3 +95,37 @@ To learn more about React Native, take a look at the following resources:
 - [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
 - [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
 - [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+
+## Firebase Chat Setup
+
+The app uses the Firebase JavaScript SDK (`firebase/auth` and `firebase/database`),
+with React Native Auth persistence backed by AsyncStorage. It does not use the
+`@react-native-firebase` APIs.
+
+1. In Firebase Console, create a project, add an app using the **Web** platform,
+   enable **Authentication > Email/Password**, and create a **Realtime Database**.
+2. Copy the Web app values into `firebaseConfig` in `src/services/firebase.ts`:
+   `apiKey`, `authDomain`, `projectId`, and `appId`. Replace `databaseURL` with
+   the exact URL shown for the Realtime Database instance (including its region).
+   The app displays an explicit setup error until every placeholder is replaced.
+3. Review `database.rules.json` against the official rules supplied by the
+   assignment and the Firebase Console data structure, then publish the rules.
+   The included rules deny unauthenticated access and restrict user data,
+   presence, chat reads, and writes to authenticated users and chat members.
+4. The proposed RTDB schema is:
+   - `users/{uid}`: public display name, optional avatar URL, and creation time.
+   - `userPrivate/{uid}/email`: email address readable only by its owner.
+   - `presence/{uid}/connections/{connectionId}` and `lastSeen`: onDisconnect
+     presence; online state is derived from active connection records.
+   - `chats/{chatId}`: stable UID-pair ID, fixed `members.first` /
+     `members.second` UIDs, metadata, and messages.
+   - `userChats/{uid}/{chatId}`: per-user chat index, preview, and
+     `unreadMessages/{messageId}` markers. Unique markers are atomically written
+     with each message so concurrent messages do not overwrite unread counts.
+5. After adding or changing native geolocation setup, install iOS pods if needed
+   and rebuild the native app. The Android location permissions are declared in
+   `android/app/src/main/AndroidManifest.xml`; iOS uses
+   `NSLocationWhenInUseUsageDescription` in `ios/MiniChat_TH3/Info.plist`.
+
+Run the app with `npm start` and, in another terminal, `npm run android` or
+`npm run ios`. The iOS run command requires macOS and Xcode.

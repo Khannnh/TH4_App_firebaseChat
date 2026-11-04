@@ -1,22 +1,14 @@
 import React, { useEffect } from 'react';
-import { Text, StyleSheet } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BootSplash from 'react-native-bootsplash';
 
-export const SplashScreen = ({ navigation }: any) => {
+export function SplashScreen() {
   useEffect(() => {
-    const init = async () => {
-      // Dùng setTimeout bọc bằng Promise thuần chuẩn không bị lỗi TS
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 1500);
-      });
-    };
-
-    init().finally(async () => {
-      await BootSplash.hide({ fade: true });
-      navigation.replace('Login');
+    BootSplash.hide({ fade: true }).catch(error => {
+      console.error('Không thể ẩn màn hình khởi động:', error);
     });
-  }, [navigation]);
+  }, []);
 
   return (
     <SafeAreaView edges={['top']} style={styles.container}>
@@ -24,7 +16,7 @@ export const SplashScreen = ({ navigation }: any) => {
       <Text style={styles.subText}>Đang tải ứng dụng...</Text>
     </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {

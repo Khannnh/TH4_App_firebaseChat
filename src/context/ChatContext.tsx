@@ -1,69 +1,128 @@
-import React, { createContext, useContext, useState } from 'react';
-import { MOCK_CHATS } from '../data';
-
-export type ChatMessage = {
-  id: string;
-  text: string;
-  sender: 'other' | 'me';
-};
-
-type Chat = (typeof MOCK_CHATS)[number];
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { getAuthErrorMessage } from '../services/auth';
+import { ensureDirectChat, subscribeToChatList } from '../services/chat';
+import { startPresence, subscribeToUsers } from '../services/users';
+import { useAuth } from './AuthContext';
+import type { ChatListItem, Contact, UserChat } from '../types';
 
 type ChatContextValue = {
-  chats: Chat[];
-  messagesByChat: Record<string, ChatMessage[]>;
-  sendMessage: (chatName: string, text: string) => void;
+  chats: ChatListItem[];
+  contacts: Contact[];
+  chatsLoading: boolean;
+  contactsLoading: boolean;
+  chatsError: string | null;
+  contactsError: string | null;
+  openChatWith: (contact: Contact) => Promise<string>;
 };
 
 const ChatContext = createContext<ChatContextValue | undefined>(undefined);
 
-export const ChatProvider = ({ children }: React.PropsWithChildren) => {
-  const [chats, setChats] = useState<Chat[]>(MOCK_CHATS);
-  const [messagesByChat, setMessagesByChat] = useState<Record<string, ChatMessage[]>>(() =>
-    MOCK_CHATS.reduce<Record<string, ChatMessage[]>>((messages, chat) => {
-      messages[chat.name] = [
-        { id: `${chat.id}-last`, text: chat.lastMessage, sender: 'other' },
-      ];
-      return messages;
-    }, {}),
+export function ChatProvider({ children }: React.PropsWithChildren) {
+  const { user } = useAuth();
+  const [chatRows, setChatRows] = useState<Record<string, UserChat>>({});
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [chatsLoading, setChatsLoading] = useState(true);
+  const [contactsLoading, setContactsLoading] = useState(true);
+  const [chatsError, setChatsError] = useState<string | null>(null);
+  const [contactsError, setContactsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setChatRows({});
+      setContacts([]);
+      setChatsLoading(false);
+      setContactsLoading(false);
+      return;
+    }
+
+    setChatsLoading(true);
+    setContactsLoading(true);
+    setChatsError(null);
+    setContactsError(null);
+
+    const stopPresence = startPresence(user.uid);
+    const stopUsers = subscribeToUsers(
+      user.uid,
+      nextContacts => {
+        setContacts(nextContacts);
+        setContactsLoading(false);
+      },
+      error => {
+        setContactsError(getAuthErrorMessage(error));
+        setContactsLoading(false);
+      },
+    );
+    const stopChats = subscribeToChatList(
+      user.uid,
+      nextChats => {
+        setChatRows(nextChats);
+        setChatsLoading(false);
+      },
+      error => {
+        setChatsError(getAuthErrorMessage(error));
+        setChatsLoading(false);
+      },
+    );
+
+    return () => {
+      stopPresence();
+      stopUsers();
+      stopChats();
+    };
+  }, [user]);
+
+  const chats = useMemo(() => {
+    const contactByUid = new Map(contacts.map(contact => [contact.uid, contact]));
+    return Object.entries(chatRows)
+      .map(([id, row]): ChatListItem | null => {
+        const peer = contactByUid.get(row.partnerId);
+        if (!peer) {
+          return null;
+        }
+        return {
+          id,
+          peer,
+          lastMessage: row.lastMessage ?? '',
+          lastMessageType: row.lastMessageType ?? 'text',
+          lastMessageAt: row.lastMessageAt ?? 0,
+          unreadCount: Object.values(row.unreadMessages ?? {}).filter(Boolean).length,
+          lastSenderId: row.lastSenderId ?? '',
+        };
+      })
+      .filter((chat): chat is ChatListItem => chat !== null)
+      .sort((left, right) => right.lastMessageAt - left.lastMessageAt);
+  }, [chatRows, contacts]);
+
+  const value = useMemo<ChatContextValue>(
+    () => ({
+      chats,
+      contacts,
+      chatsLoading,
+      contactsLoading,
+      chatsError,
+      contactsError,
+      openChatWith: contact => {
+        if (!user) {
+          return Promise.reject(new Error('Bạn cần đăng nhập để bắt đầu trò chuyện.'));
+        }
+        return ensureDirectChat(user.uid, contact.uid);
+      },
+    }),
+    [
+      chats,
+      contacts,
+      chatsLoading,
+      contactsLoading,
+      chatsError,
+      contactsError,
+      user,
+    ],
   );
 
-  const sendMessage = (chatName: string, text: string) => {
-    const trimmedText = text.trim();
-    if (!trimmedText) return;
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
+}
 
-    setMessagesByChat(current => ({
-      ...current,
-      [chatName]: [
-        ...(current[chatName] ?? []),
-        { id: Date.now().toString(), text: trimmedText, sender: 'me' },
-      ],
-    }));
-
-    const time = new Date().toLocaleTimeString('vi-VN', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    setChats(current => {
-      const updatedChats = current.map(chat =>
-        chat.name === chatName
-          ? { ...chat, lastMessage: `Bạn: ${trimmedText}`, time, unreadCount: 0 }
-          : chat,
-      );
-      const chatIndex = updatedChats.findIndex(chat => chat.name === chatName);
-      if (chatIndex <= 0) return updatedChats;
-      return [updatedChats[chatIndex], ...updatedChats.filter((_, index) => index !== chatIndex)];
-    });
-  };
-
-  return (
-    <ChatContext.Provider value={{ chats, messagesByChat, sendMessage }}>
-      {children}
-    </ChatContext.Provider>
-  );
-};
-
-export const useChat = () => {
+export function useChat(): ChatContextValue {
   const context = useContext(ChatContext);
   if (!context) {
     throw new Error('useChat must be used within a ChatProvider');
